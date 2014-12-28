@@ -1,7 +1,7 @@
 package org.blackbox.jnibox;
 
 /**
- * Model of a load JNI library. It stores the basic information of the library.
+ * Model of a storeAndLoad JNI library. It stores the basic information of the library.
  */
 public final class JniLibrary {
 
@@ -66,6 +66,7 @@ public final class JniLibrary {
     }
 
     void setStatus(Status status) {
+        assert status != null;
         this.status = status;
     }
 
@@ -78,12 +79,13 @@ public final class JniLibrary {
         return jniRepository;
     }
 
-    public void setLibraryPath(String libraryPath) {
+    void setLibraryPath(String libraryPath) {
+        assert libraryPath != null;
         this.libraryPath = libraryPath;
     }
 
     /**
-     * Same as library.getJniRepository().load(library)
+     * Same as library.getJniRepository().storeAndLoad(library)
      * @throws JniRepositoryException
      */
     public void load() throws JniRepositoryException {

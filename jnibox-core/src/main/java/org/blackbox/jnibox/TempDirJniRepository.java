@@ -24,6 +24,10 @@ public final class TempDirJniRepository extends AbstractJniRepository {
     
     private final static AtomicInteger COUNT = new AtomicInteger(0);
 
+    public TempDirJniRepository(JniLibraryLoader jniLibraryLoader) {
+        super(createRepositoryDir(), jniLibraryLoader);
+    }
+
     public TempDirJniRepository() {
         super(createRepositoryDir());
     }

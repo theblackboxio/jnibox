@@ -18,7 +18,7 @@ public interface JniRepository {
      * @return The JNI library object with the attached info of the loading.
      * @throws JniRepositoryException Wraps any exception thrown during the process of store and loading.
      */
-    JniLibrary load(String libraryPackage, String libraryName) throws JniRepositoryException;
+    JniLibrary storeAndLoad(String libraryPackage, String libraryName) throws JniRepositoryException;
 
     /**
      * Stores a library that is stored in the classpath as resource.
@@ -50,13 +50,24 @@ public interface JniRepository {
      * @return The JNI library object with the attached info of the storing.
      * @throws JniRepositoryException Wraps any exception thrown during the process of store and loading.
      */
-    JniLibrary load(String libraryPath, String libraryPackage, String libraryName) throws JniRepositoryException;
+    JniLibrary storeAndLoad(String libraryPath, String libraryPackage, String libraryName) throws JniRepositoryException;
+
+
+
+    /**
+     * Loads the given JNI library by its package and name.
+     *
+     * @param libraryName Name of library.
+     * @param libraryPackage  Package of library.
+     * @throws JniRepositoryException Wraps any excpetion thrown during the process of storeAndLoad
+     */
+    void load(String libraryPackage, String libraryName) throws JniRepositoryException;
 
     /**
      * Loads the given JNI library.
      *
-     * @param jniLibrary The JNI library to load.
-     * @throws JniRepositoryException Wraps any excpetion thrown during the process of load
+     * @param jniLibrary The JNI library to storeAndLoad.
+     * @throws JniRepositoryException Wraps any excpetion thrown during the process of storeAndLoad
      */
     void load(JniLibrary jniLibrary) throws JniRepositoryException;
 
