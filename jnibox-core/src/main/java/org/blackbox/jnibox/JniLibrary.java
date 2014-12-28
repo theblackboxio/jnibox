@@ -5,32 +5,32 @@ package org.blackbox.jnibox;
  */
 public final class JniLibrary {
 
+    public enum Status {
+        DECLARED,
+        STORED,
+        LOADED
+    }
+
     private final String libraryPackage;
     private final String libraryName;
-    private final String libraryPath;
-    private boolean isLoaded;
+    private String libraryPath;
+    private Status status;
     private final JniRepository jniRepository;
 
-    /**
-     * Plain constructor for all arguments.
-     *
-     * @param libraryPackage Package of library (e.g. 'org.mycompany.myproject.mycomponent')
-     * @param libraryName Name of the library (e.g. 'complex_math')
-     * @param libraryPath Path where it has been stored (e.g '/tmp/1234@localhost/org/mycompany/myproject/mycomponent/complex_math')
-     * @param isLoaded The loading status of the library
-     * @param jniRepository The repository that manages this library.
-     */
-    JniLibrary(String libraryPackage, String libraryName, String libraryPath, boolean isLoaded, JniRepository jniRepository) {
+    JniLibrary(String libraryPackage, String libraryName, JniRepository jniRepository) {
+        this(libraryPackage, libraryName, Status.DECLARED, jniRepository);
+    }
+
+    JniLibrary(String libraryPackage, String libraryName, Status status, JniRepository jniRepository) {
 
         assert libraryName!= null;
         assert libraryPackage != null;
-        assert libraryPath != null;
+        assert status != null;
         assert jniRepository != null;
 
         this.libraryPackage = libraryPackage;
         this.libraryName = libraryName;
-        this.libraryPath = libraryPath;
-        this.isLoaded = isLoaded;
+        this.status = status;
         this.jniRepository = jniRepository;
     }
 
@@ -61,13 +61,12 @@ public final class JniLibrary {
         return libraryPath;
     }
 
-    /**
-     * Returns if the library is loaded or not.
-     *
-     * @return True if the library is loaded, false otherwise.
-     */
-    public boolean isLoaded(){
-        return isLoaded;
+    public Status getStatus() {
+        return status;
+    }
+
+    void setStatus(Status status) {
+        this.status = status;
     }
 
     /**
@@ -79,15 +78,42 @@ public final class JniLibrary {
         return jniRepository;
     }
 
-    void setLoaded(boolean isLoaded) {
-        this.isLoaded = isLoaded;
+    public void setLibraryPath(String libraryPath) {
+        this.libraryPath = libraryPath;
     }
 
     /**
      * Same as library.getJniRepository().load(library)
-     * @throws JniLoaderException
+     * @throws JniRepositoryException
      */
-    public void load() throws JniLoaderException {
+    public void load() throws JniRepositoryException {
         this.getJniRepository().load(this);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        JniLibrary that = (JniLibrary) o;
+
+        if (!jniRepository.equals(that.jniRepository)) return false;
+        if (!libraryName.equals(that.libraryName)) return false;
+        if (!libraryPackage.equals(that.libraryPackage)) return false;
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = libraryPackage.hashCode();
+        result = 31 * result + libraryName.hashCode();
+        result = 31 * result + jniRepository.hashCode();
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "JniLibrary(" + libraryName + '.' +  libraryPackage + ')';
     }
 }

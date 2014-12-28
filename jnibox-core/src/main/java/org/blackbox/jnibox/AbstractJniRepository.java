@@ -1,5 +1,8 @@
 package org.blackbox.jnibox;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
 import com.google.common.io.Resources;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -14,11 +17,15 @@ abstract class AbstractJniRepository implements JniRepository {
 
     private final File repositoryDirectory;
 
-    public AbstractJniRepository(File repositoryDirectory) {
+    private final Table<String, String, JniLibrary> libraries;
+
+    AbstractJniRepository(File repositoryDirectory) {
+        assert repositoryDirectory != null;
         this.repositoryDirectory = repositoryDirectory;
         if (!this.repositoryDirectory.exists()) {
             repositoryDirectory.mkdirs();
         }
+        libraries = HashBasedTable.create();
     }
 
     @Override
@@ -27,79 +34,139 @@ abstract class AbstractJniRepository implements JniRepository {
     }
 
     @Override
-    public JniLibrary store(String libraryPackage, String libraryName) throws JniLoaderException {
+    public JniLibrary store(String libraryPackage, String libraryName) throws JniRepositoryException {
+
+        Preconditions.checkNotNull(libraryName);
+        Preconditions.checkNotNull(libraryPackage);
+
+        checkStore(libraryPackage, libraryName);
+
         try {
             String localLibraryParentPath = libraryPackage.replace('.', File.separatorChar);
             String localLibraryPath = localLibraryParentPath + File.separator + libraryName;
-            return store(Resources.getResource(localLibraryPath).openStream(), libraryPackage, libraryName);
+            safeStore(Resources.getResource(localLibraryPath).openStream(), libraryPackage, libraryName);
+            return libraries.get(libraryPackage, libraryName);
         } catch (IOException e) {
-            throw new JniLoaderException(e);
+            throw new JniRepositoryException(e);
         }
     }
 
     @Override
-    public JniLibrary store(String libraryPath, String libraryPackage, String libraryName) throws JniLoaderException {
+    public JniLibrary store(String libraryPath, String libraryPackage, String libraryName) throws JniRepositoryException {
+
+        Preconditions.checkNotNull(libraryPath);
+        Preconditions.checkNotNull(libraryName);
+        Preconditions.checkNotNull(libraryPackage);
+
+        checkStore(libraryPackage, libraryName);
+
         try{
             File libraryFile = new File(libraryPath);
-            return store(new FileInputStream(libraryFile), libraryPackage, libraryName);
+            safeStore(new FileInputStream(libraryFile), libraryPackage, libraryName);
+            return libraries.get(libraryPackage, libraryName);
         } catch (IOException e) {
-            throw new JniLoaderException(e);
-        }
-    }
-
-    private JniLibrary store(InputStream inputStream, String libraryPackage, String libraryName) throws JniLoaderException {
-        try {
-            // org.company.project.component => org/company/project/component
-            String localLibraryParentPath = libraryPackage.replace('.', File.separatorChar);
-            String finalLibraryParentPath = repositoryDirectory.getAbsolutePath() + File.separator + localLibraryParentPath;
-            File finalLibraryParentDir = new File(finalLibraryParentPath);
-            finalLibraryParentDir.mkdirs();
-
-            String localLibraryPath = localLibraryParentPath + File.separator + libraryName;
-            String finalLibraryPath = finalLibraryParentPath + File.separator + libraryName;
-
-            File finalLibraryFile = new File(finalLibraryPath);
-            OutputStream out = FileUtils.openOutputStream(finalLibraryFile);
-            IOUtils.copy(inputStream, out);
-            inputStream.close();
-            out.close();
-            return new JniLibrary(libraryPackage, libraryName, finalLibraryPath, false, this);
-        } catch (Exception e) {
-            throw new JniLoaderException(e);
+            throw new JniRepositoryException(e);
         }
     }
 
     @Override
-    public void load(JniLibrary jniLibrary) throws JniLoaderException {
-        if (!jniLibrary.isLoaded() && this.equals(jniLibrary.getJniRepository())) {
-            try {
-                System.load(jniLibrary.getLibraryPath());
-                jniLibrary.setLoaded(true);
-            } catch (Exception e) {
-                throw new JniLoaderException(e);
+    public void load(JniLibrary jniLibrary) throws JniRepositoryException {
+
+        Preconditions.checkNotNull(jniLibrary);
+        Preconditions.checkArgument(this.equals(jniLibrary.getJniRepository()));
+        Preconditions.checkState(JniLibrary.Status.STORED.equals(jniLibrary.getStatus()));
+
+        safeLoad(jniLibrary);
+    }
+
+    @Override
+    public JniLibrary load(String libraryPath, String libraryPackage, String libraryName) throws JniRepositoryException {
+        JniLibrary jniLibrary = store(libraryPath, libraryPackage, libraryName);
+        safeLoad(jniLibrary);
+        return jniLibrary;
+    }
+
+    @Override
+    public JniLibrary load(String libraryPackage, String libraryName) throws JniRepositoryException {
+        JniLibrary jniLibrary = store(libraryPackage, libraryName);
+        safeLoad(jniLibrary);
+        return jniLibrary;
+    }
+
+    @Override
+    public void close() throws JniRepositoryException {
+        try {
+            FileUtils.deleteDirectory(repositoryDirectory);
+            this.libraries.clear();
+        } catch (IOException e) {
+            throw new JniRepositoryException(e);
+        }
+    }
+
+    @Override
+    public int size() {
+        return libraries.size();
+    }
+
+    private void safeLoad(final JniLibrary library) throws JniRepositoryException {
+        assert library != null;
+        assert libraries.containsValue(library);
+        if (library.getStatus().equals(JniLibrary.Status.LOADED)) {
+            throw new JniLibraryAlreadyLoadedException(library.getLibraryPackage(), library.getLibraryName());
+        }
+        synchronized (library) {
+            String path = library.getLibraryPath();
+            System.load(path);
+            library.setStatus(JniLibrary.Status.LOADED);
+        }
+    }
+
+    private void checkStore(String libraryPackage, String libraryName) throws JniLibraryAlreadyExistsException {
+        assert libraryName != null;
+        assert libraryPackage != null;
+        synchronized (libraries) {
+            if (libraries.contains(libraryPackage, libraryName)) {
+                throw new JniLibraryAlreadyExistsException(libraryPackage, libraryName);
+            } else {
+                libraries.put(libraryPackage, libraryName, new JniLibrary(libraryPackage, libraryName, this));
             }
         }
     }
 
-    @Override
-    public JniLibrary load(String libraryPath, String libraryPackage, String libraryName) throws JniLoaderException {
-        JniLibrary jniLibrary = store(libraryPath, libraryPackage, libraryName);
-        load(jniLibrary);
-        return jniLibrary;
-    }
-
-    @Override
-    public JniLibrary load(String libraryPackage, String libraryName) throws JniLoaderException {
-        JniLibrary jniLibrary = store(libraryPackage, libraryName);
-        load(jniLibrary);
-        return jniLibrary;
-    }
-
-    public void close() throws JniLoaderException {
+    private void safeStore(InputStream inputStream, String libraryPackage, String libraryName) throws JniRepositoryException {
+        assert inputStream != null;
+        assert libraryName != null;
+        assert libraryPackage != null;
         try {
-            FileUtils.deleteDirectory(repositoryDirectory);
-        } catch (IOException e) {
-            throw new JniLoaderException(e);
+            final JniLibrary library = libraries.get(libraryPackage, libraryName);
+            assert library != null;
+            assert library.getStatus().equals(JniLibrary.Status.DECLARED);
+            synchronized (library) {
+                // org.company.project.component => org/company/project/component
+                String localLibraryParentPath = libraryPackage.replace('.', File.separatorChar);
+                String finalLibraryParentPath = repositoryDirectory.getAbsolutePath() + File.separator + localLibraryParentPath;
+                File finalLibraryParentDir = new File(finalLibraryParentPath);
+                finalLibraryParentDir.mkdirs();
+
+                String localLibraryPath = localLibraryParentPath + File.separator + libraryName;
+                String finalLibraryPath = finalLibraryParentPath + File.separator + libraryName;
+
+                File finalLibraryFile = new File(finalLibraryPath);
+                OutputStream out = FileUtils.openOutputStream(finalLibraryFile);
+                IOUtils.copy(inputStream, out);
+                inputStream.close();
+                out.close();
+                library.setLibraryPath(finalLibraryPath);
+                library.setStatus(JniLibrary.Status.STORED);
+            }
+        } catch (Exception e) {
+            throw new JniRepositoryException(e);
         }
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        this.close();
+        super.finalize();
     }
 }
